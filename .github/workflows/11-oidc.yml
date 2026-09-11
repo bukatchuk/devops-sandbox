@@ -37,7 +37,7 @@ jobs:
           resp=$(curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
                  "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=devops-course-demo")
           token=$(printf '%s' "$resp" | jq -r .value)
-          echo "длина токена: ${#token} символов, частей: $(printf '%s' "$token" | tr '.' '\n' | wc -l)"
+          echo "длина токена: ${#token} символов, точек-разделителей: $(printf '%s' "$token" | tr -cd '.' | wc -c)"
           printf '%s' "$token" | python3 tools/decode-jwt.py -
 
       - name: Аудитория задаётся запросом
@@ -50,3 +50,34 @@ jobs:
             aud_in_token=$(printf '%s' "$resp" | jq -r '.value | split(".")[1] | @base64d | fromjson | .aud' 2>/dev/null || echo '?')
             printf '  запросили %-32s получили aud=%s\n' "$aud" "$aud_in_token"
           done
+
+  # Тот же запрос токена, но джоба привязана к окружению: меняется поле sub.
+  with-environment:
+    runs-on: ubuntu-latest
+    environment: prod
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: sub при привязке к окружению
+        shell: bash
+        run: |
+          set -euo pipefail
+          resp=$(curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+                 "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=devops-course-demo")
+          printf '%s' "$resp" | jq -r .value | python3 tools/decode-jwt.py - | head -12
+
+  # Переменная и секрет с похожими значениями: что видно в журнале.
+  variable-vs-secret:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Переменная не маскируется, секрет маскируется
+        env:
+          VAR: ${{ vars.DEMO_VARIABLE }}
+          SEC: ${{ secrets.DEMO_SECRET }}
+        shell: bash
+        run: |
+          echo "vars.DEMO_VARIABLE = $VAR"
+          echo "secrets.DEMO_SECRET = $SEC"
+          echo "длины: переменная ${#VAR}, секрет ${#SEC}"
