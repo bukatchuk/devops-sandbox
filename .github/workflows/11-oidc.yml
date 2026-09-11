@@ -1,0 +1,52 @@
+# OIDC: как пайплайн получает короткоживущий токен и что в нём лежит.
+name: 11 oidc
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/11-oidc.yml'
+
+# По умолчанию прав на выдачу токена НЕТ — их запрашивают явно.
+permissions:
+  contents: read
+
+jobs:
+  # Джоба без разрешения id-token: проверяем, что ничего не выдаётся.
+  without-permission:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Есть ли переменные для запроса токена
+        shell: bash
+        run: |
+          echo "URL задан:   [${ACTIONS_ID_TOKEN_REQUEST_URL:+да}${ACTIONS_ID_TOKEN_REQUEST_URL:-нет}]"
+          echo "TOKEN задан: [${ACTIONS_ID_TOKEN_REQUEST_TOKEN:+да}${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-нет}]"
+
+  with-permission:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write      # именно это разрешение включает выдачу OIDC-токена
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Запросить токен и разобрать его
+        shell: bash
+        run: |
+          set -euo pipefail
+          resp=$(curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+                 "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=devops-course-demo")
+          token=$(printf '%s' "$resp" | jq -r .value)
+          echo "длина токена: ${#token} символов, частей: $(printf '%s' "$token" | tr '.' '\n' | wc -l)"
+          printf '%s' "$token" | python3 tools/decode-jwt.py -
+
+      - name: Аудитория задаётся запросом
+        shell: bash
+        run: |
+          set -euo pipefail
+          for aud in sts.amazonaws.com api://AzureADTokenExchange; do
+            resp=$(curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+                   "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${aud}")
+            aud_in_token=$(printf '%s' "$resp" | jq -r '.value | split(".")[1] | @base64d | fromjson | .aud' 2>/dev/null || echo '?')
+            printf '  запросили %-32s получили aud=%s\n' "$aud" "$aud_in_token"
+          done

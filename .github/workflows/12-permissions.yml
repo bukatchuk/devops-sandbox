@@ -1,0 +1,78 @@
+# Права GITHUB_TOKEN: что можно и чего нельзя при разных permissions.
+name: 12 permissions
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/12-permissions.yml'
+
+jobs:
+  read-only:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read          # всё остальное при явном блоке становится none
+    steps:
+      - name: Чтение репозитория через API
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          code=$(curl -s -o /tmp/out -w '%{http_code}' \
+                 -H "Authorization: Bearer $GH_TOKEN" \
+                 "https://api.github.com/repos/${{ github.repository }}/commits?per_page=1")
+          echo "чтение коммитов: код $code"
+
+      - name: Попытка записи (создать метку)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          code=$(curl -s -o /tmp/err -w '%{http_code}' -X POST \
+                 -H "Authorization: Bearer $GH_TOKEN" \
+                 "https://api.github.com/repos/${{ github.repository }}/labels" \
+                 -d '{"name":"lab-804-read-only","color":"ededed"}')
+          echo "создание метки: код $code"
+          head -c 200 /tmp/err; echo
+
+  with-write:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write           # права выдаются точечно, под конкретное действие
+    steps:
+      - name: Создать и сразу удалить метку
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          name="lab-804-$(date +%s)"
+          code=$(curl -s -o /tmp/out -w '%{http_code}' -X POST \
+                 -H "Authorization: Bearer $GH_TOKEN" \
+                 "https://api.github.com/repos/${{ github.repository }}/labels" \
+                 -d "{\"name\":\"$name\",\"color\":\"ededed\"}")
+          echo "создание метки: код $code"
+          del=$(curl -s -o /dev/null -w '%{http_code}' -X DELETE \
+                -H "Authorization: Bearer $GH_TOKEN" \
+                "https://api.github.com/repos/${{ github.repository }}/labels/$name")
+          echo "удаление метки: код $del"
+
+  default-permissions:
+    runs-on: ubuntu-latest
+    # блока permissions нет вовсе — действуют настройки репозитория
+    steps:
+      - name: Что доступно без явного блока
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          name="lab-804-default-$(date +%s)"
+          code=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
+                 -H "Authorization: Bearer $GH_TOKEN" \
+                 "https://api.github.com/repos/${{ github.repository }}/labels" \
+                 -d "{\"name\":\"$name\",\"color\":\"ededed\"}")
+          echo "создание метки без блока permissions: код $code"
+          [ "$code" = "201" ] && curl -s -o /dev/null -X DELETE \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            "https://api.github.com/repos/${{ github.repository }}/labels/$name"
+          echo "(201 означает, что по умолчанию у пайплайна есть права на запись)"
