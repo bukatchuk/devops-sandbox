@@ -1,0 +1,53 @@
+# Задание для своего раннера. Запускается только вручную: раннер живёт минуты,
+# и случайные прогоны ему не нужны.
+name: 14 self-hosted
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  on-our-runner:
+    # Ярлыки: self-hosted плюс свой, чтобы задание не улетело на чужой раннер
+    runs-on: [self-hosted, course-lab]
+    steps:
+      - name: Кто мы и где
+        shell: bash
+        run: |
+          echo "имя раннера:   $RUNNER_NAME"
+          echo "окружение:     $RUNNER_ENVIRONMENT"
+          echo "ОС:            $(head -1 /etc/os-release)"
+          echo "ядер:          $(nproc)"
+          echo "пользователь:  $(id -un), домашний каталог $HOME"
+          echo "рабочий путь:  $GITHUB_WORKSPACE"
+
+      - name: Что предустановлено (сравните с ubuntu-latest)
+        shell: bash
+        run: |
+          for c in git curl jq python3 docker node go make gcc; do
+            printf '  %-8s %s\n' "$c" "$(command -v "$c" || echo НЕТ)"
+          done
+
+      - uses: actions/checkout@v7
+
+      - name: Что мы оставляем на машине
+        shell: bash
+        run: |
+          echo "содержимое рабочего каталога:"
+          find "$GITHUB_WORKSPACE" -maxdepth 1 -printf '%M %8s %p\n' | head -10
+          echo "файл, который останется после задания:" > sled-zadaniya.txt
+          date -u >> sled-zadaniya.txt
+          echo "каталог _work целиком:"
+          du -sh "$(dirname "$(dirname "$GITHUB_WORKSPACE")")" 2>/dev/null || true
+
+      - name: Поле runner_environment в OIDC-токене
+        shell: bash
+        run: |
+          set -euo pipefail
+          resp=$(curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+                 "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=devops-course-demo")
+          printf '%s' "$resp" | jq -r '.value | split(".")[1] | @base64d | fromjson
+                 | "  runner_environment: \(.runner_environment)\n  sub: \(.sub)"'

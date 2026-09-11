@@ -1,0 +1,5 @@
+# Свои ярлыки раннеров: без этого файла actionlint считает их опечаткой
+# и сообщает «label "course-lab" is unknown».
+self-hosted-runner:
+  labels:
+    - course-lab
