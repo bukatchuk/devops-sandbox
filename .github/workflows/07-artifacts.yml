@@ -1,0 +1,67 @@
+# Артефакты: единственный штатный способ передать ФАЙЛ из джобы в джобу.
+name: 07 artifacts
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/07-artifacts.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Собрать «артефакт»
+        id: meta
+        run: |
+          mkdir -p out
+          echo "сборка ${{ github.run_number }} от $(date -u +%FT%TZ)" > out/build.txt
+          head -c 5000000 /dev/urandom > out/payload.bin   # 5 МБ «бинарника»
+          echo "version=1.0.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+          ls -l out
+        shell: bash
+
+      - name: Положить в артефакты
+        uses: actions/upload-artifact@v7
+        with:
+          name: build-output
+          path: out/
+          retention-days: 1
+
+  # Джоба проверяет, что файла из build нет, а артефакт — есть.
+  use:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Файл из соседней джобы
+        run: |
+          if [ -f out/build.txt ]; then echo "файл на месте — джобы делят диск"; else echo "файла нет"; fi
+        shell: bash
+
+      - name: Забрать артефакт
+        uses: actions/download-artifact@v8
+        with:
+          name: build-output
+          path: incoming/
+
+      - name: Что пришло
+        run: |
+          ls -l incoming/
+          cat incoming/build.txt
+          echo "версия из outputs: ${{ needs.build.outputs.version }}"
+        shell: bash
+
+  # Джоба, которая должна выполниться даже при падении предыдущей.
+  report:
+    runs-on: ubuntu-latest
+    needs: [build, use]
+    if: always()
+    steps:
+      - name: Итоги
+        run: |
+          echo "build: ${{ needs.build.result }}"
+          echo "use:   ${{ needs.use.result }}"
+        shell: bash

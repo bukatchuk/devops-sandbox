@@ -1,0 +1,53 @@
+# Кэш: что он даёт и чего не делает.
+# Воркфлоу запускается дважды подряд — первый прогон кэш создаёт, второй берёт.
+name: 06 cache
+
+on:
+  workflow_dispatch:
+    inputs:
+      use_cache:
+        description: 'включать ли кэш'
+        required: false
+        default: 'yes'
+        type: choice
+        options: ['yes', 'no']
+  push:
+    paths:
+      - '.github/workflows/06-cache.yml'
+
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+
+      # Ключ включает содержимое файла зависимостей: изменился файл — изменился
+      # ключ, и кэш не подойдёт. Так и задумано.
+      - name: Кэш колёс pip
+        id: cache
+        if: inputs.use_cache != 'no'
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-py313-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            pip-${{ runner.os }}-py313-
+
+      - name: Попадание в кэш
+        run: echo "cache-hit=[${{ steps.cache.outputs.cache-hit }}] (пусто = кэша не было или он выключен)"
+
+      - name: Установка зависимостей с замером
+        run: |
+          start=$(date +%s%3N)
+          pip install -r requirements.txt > /tmp/pip.log 2>&1
+          end=$(date +%s%3N)
+          echo "установка заняла $((end - start)) мс"
+          echo "скачано колёс: $(grep -c '^  Downloading' /tmp/pip.log || echo 0)"
+          echo "взято из кэша: $(grep -c 'Using cached' /tmp/pip.log || echo 0)"
+        shell: bash
+
+      - name: Размер кэша pip на диске
+        run: du -sh ~/.cache/pip 2>/dev/null || echo "каталога нет"

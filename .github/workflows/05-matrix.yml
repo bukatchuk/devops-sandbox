@@ -1,0 +1,42 @@
+# Матрица: одна джоба описана один раз, а выполняется во многих сочетаниях.
+name: 05 matrix
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/05-matrix.yml'
+
+jobs:
+  tests:
+    # fail-fast по умолчанию true: первая упавшая ячейка отменяет остальные.
+    # Здесь выключено, чтобы увидеть результат каждой ячейки.
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.11', '3.12', '3.13']
+        flavor: [base, extra]
+        # exclude убирает сочетание; include добавляет отдельную ячейку
+        exclude:
+          - python: '3.11'
+            flavor: extra
+        include:
+          - python: '3.13'
+            flavor: extra
+            note: основная комбинация
+    runs-on: ubuntu-latest
+    name: py${{ matrix.python }} / ${{ matrix.flavor }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Что в этой ячейке
+        run: |
+          echo "python: $(python3 --version)"
+          echo "flavor: ${{ matrix.flavor }}"
+          echo "note:   ${{ matrix.note || 'нет' }}"
+      - name: Установить зависимости
+        run: pip install -r requirements.txt
+      - name: Тесты
+        run: pytest -q
