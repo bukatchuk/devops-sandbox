@@ -14,6 +14,17 @@ jobs:
     # Ярлыки: self-hosted плюс свой, чтобы задание не улетело на чужой раннер
     runs-on: [self-hosted, course-lab]
     steps:
+      - name: Следы прошлого задания на этой машине
+        shell: bash
+        run: |
+          mark="$HOME/mezhdu-zadaniyami.txt"
+          if [ -f "$mark" ]; then
+            echo "файл от прошлого задания НАЙДЕН: $(cat "$mark")"
+          else
+            echo "файла от прошлого задания нет — машина чистая"
+          fi
+          echo "задание ${{ github.run_number }} было здесь $(date -u +%T)" > "$mark"
+
       - name: Кто мы и где
         shell: bash
         run: |
