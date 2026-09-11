@@ -1,0 +1,31 @@
+# Что делает fail-fast: одна ячейка падает, остальные длинные.
+name: 10 fail-fast
+
+on:
+  workflow_dispatch:
+    inputs:
+      fail_fast:
+        description: 'отменять ли остальные ячейки'
+        required: false
+        default: 'true'
+        type: choice
+        options: ['true', 'false']
+
+jobs:
+  cells:
+    strategy:
+      fail-fast: ${{ inputs.fail_fast != 'false' }}
+      matrix:
+        cell: [one, two, three, four]
+    runs-on: ubuntu-latest
+    name: ячейка ${{ matrix.cell }}
+    steps:
+      - name: Работа
+        shell: bash
+        run: |
+          if [ "${{ matrix.cell }}" = "two" ]; then
+            echo "ячейка two падает сразу"
+            exit 1
+          fi
+          sleep 40
+          echo "ячейка ${{ matrix.cell }} доработала до конца"
