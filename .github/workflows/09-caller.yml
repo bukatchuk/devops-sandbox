@@ -1,0 +1,38 @@
+# Вызов переиспользуемого воркфлоу и составного действия.
+name: 09 caller
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/09-caller.yml'
+      - '.github/workflows/08-reusable.yml'
+      - '.github/actions/report/action.yml'
+
+jobs:
+  call-313:
+    uses: ./.github/workflows/08-reusable.yml
+    with:
+      python: '3.13'
+
+  call-312:
+    uses: ./.github/workflows/08-reusable.yml
+    with:
+      python: '3.12'
+
+  summary:
+    runs-on: ubuntu-latest
+    needs: [call-313, call-312]
+    steps:
+      - uses: actions/checkout@v7
+      - name: Составное действие одним шагом
+        id: report
+        uses: ./.github/actions/report
+        with:
+          title: Сводка
+      - name: Что вернули вызванные воркфлоу
+        shell: bash
+        run: |
+          echo "call-313 отдал: ${{ needs.call-313.outputs.tested }}"
+          echo "call-312 отдал: ${{ needs.call-312.outputs.tested }}"
+          echo "составное действие отдало: ${{ steps.report.outputs.line }}"

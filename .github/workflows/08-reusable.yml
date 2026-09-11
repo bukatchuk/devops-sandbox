@@ -1,0 +1,31 @@
+# Переиспользуемый воркфлоу: вызывается из другого воркфлоу, а не событием.
+name: 08 reusable (called)
+
+on:
+  workflow_call:
+    inputs:
+      python:
+        description: 'версия Python'
+        required: true
+        type: string
+    outputs:
+      tested:
+        description: 'какая версия проверена'
+        value: ${{ jobs.test.outputs.tested }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    outputs:
+      tested: ${{ steps.run.outputs.tested }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ inputs.python }}
+      - id: run
+        shell: bash
+        run: |
+          pip install -r requirements.txt >/dev/null
+          pytest -q
+          echo "tested=${{ inputs.python }}" >> "$GITHUB_OUTPUT"

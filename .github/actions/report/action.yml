@@ -1,0 +1,25 @@
+# Составное действие: несколько шагов, вызываемых как один.
+name: 'Короткий отчёт'
+description: 'Печатает сводку о прогоне; пример составного действия'
+inputs:
+  title:
+    description: 'заголовок отчёта'
+    required: false
+    default: 'Отчёт'
+outputs:
+  line:
+    description: 'собранная строка'
+    value: ${{ steps.build.outputs.line }}
+runs:
+  using: composite
+  steps:
+    - name: Собрать строку
+      id: build
+      shell: bash      # в составном действии shell обязателен у каждого run
+      run: echo "line=${{ inputs.title }} — прогон ${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+    - name: Напечатать
+      shell: bash
+      run: echo "${{ steps.build.outputs.line }}"
+    - name: Показать, что шагов внутри несколько
+      shell: bash
+      run: echo "это третий шаг внутри составного действия"
