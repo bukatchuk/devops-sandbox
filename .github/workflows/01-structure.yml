@@ -1,0 +1,41 @@
+# Минимальный рабочий воркфлоу: из чего он состоит.
+# Пять обязательных уровней: name -> on -> jobs -> runs-on -> steps.
+name: 01 structure
+
+on:
+  # push с фильтром по путям: правка README этот воркфлоу не запускает
+  push:
+    paths:
+      - 'app/**'
+      - 'tests/**'
+      - '.github/workflows/01-structure.yml'
+  # ручной запуск — единственный способ запустить воркфлоу кнопкой
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Забрать код
+        uses: actions/checkout@v7
+
+      - name: Поставить Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+
+      - name: Установить зависимости
+        run: pip install -r requirements.txt
+
+      - name: Прогнать тесты
+        run: pytest -q
+
+      - name: Показать, на чём это выполнялось
+        run: |
+          echo "ОС:        $(lsb_release -ds 2>/dev/null || head -1 /etc/os-release)"
+          echo "ядер:      $(nproc)"
+          echo "памяти:    $(free -m | awk '/Mem:/ {print $2} ') МБ"
+          echo "диск:      $(df -h / | awk 'NR==2 {print $4}') свободно"
+          echo "python:    $(python3 --version)"
+          echo "docker:    $(docker --version 2>/dev/null || echo нет)"
+          echo "gh:        $(gh --version 2>/dev/null | head -1 || echo нет)"

@@ -1,0 +1,60 @@
+# Шаги: своя оболочка у каждого, переменные и их приоритет, поведение при ошибке.
+name: 03 steps and env
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/03-steps-env.yml'
+
+env:
+  LEVEL: workflow
+
+jobs:
+  steps-demo:
+    runs-on: ubuntu-latest
+    env:
+      LEVEL: job
+    steps:
+      - name: Приоритет переменных
+        env:
+          LEVEL: step
+        run: echo "LEVEL=$LEVEL (объявлен на всех трёх уровнях)"
+
+      - name: Без переменной шага
+        run: echo "LEVEL=$LEVEL"
+
+      - name: export не переживает границу шага
+        run: |
+          export CARRIED=да
+          echo "внутри шага CARRIED=$CARRIED"
+
+      - name: Следующий шаг про CARRIED не знает
+        run: echo "в следующем шаге CARRIED=[${CARRIED:-пусто}]"
+
+      - name: Передать значение правильно — через GITHUB_ENV
+        run: echo "CARRIED=да" >> "$GITHUB_ENV"
+
+      - name: Теперь знает
+        run: echo "после GITHUB_ENV CARRIED=[${CARRIED:-пусто}]"
+
+      - name: Оболочка по умолчанию — что происходит после ошибки
+        continue-on-error: true
+        run: |
+          echo "скрипт шага: $0"
+          echo "строка до ошибки"
+          false
+          echo "СТРОКА ПОСЛЕ ОШИБКИ — увидим ли её?"
+
+      - name: Оболочка по умолчанию — ошибка в середине конвейера
+        continue-on-error: true
+        run: |
+          false | cat
+          echo "после конвейера код=$? — шаг ещё жив?"
+
+      - name: То же самое с shell bash
+        shell: bash
+        continue-on-error: true
+        run: |
+          false | cat
+          echo "после конвейера код=$? — а здесь?"

@@ -1,0 +1,66 @@
+# Контексты, выражения, условия и маскирование секретов.
+name: 04 contexts
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'режим запуска'
+        required: false
+        default: 'обычный'
+        type: choice
+        options: ['обычный', 'подробный']
+  push:
+    paths:
+      - '.github/workflows/04-contexts.yml'
+
+jobs:
+  contexts:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Что лежит в контекстах
+        run: |
+          echo "событие:      ${{ github.event_name }}"
+          echo "ссылка:       ${{ github.ref }}"
+          echo "коммит:       ${{ github.sha }}"
+          echo "репозиторий:  ${{ github.repository }}"
+          echo "номер запуска: ${{ github.run_number }}, попытка ${{ github.run_attempt }}"
+          echo "ОС раннера:   ${{ runner.os }}, архитектура ${{ runner.arch }}"
+          echo "ввод mode:    [${{ inputs.mode }}]"
+
+      - name: Шаг только для ручного запуска
+        if: github.event_name == 'workflow_dispatch'
+        run: echo "запущено кнопкой"
+
+      - name: Шаг только для push
+        if: github.event_name == 'push'
+        run: echo "запущено пушем"
+
+      - name: Секрет в журнале маскируется
+        env:
+          TOKEN: ${{ secrets.DEMO_SECRET }}
+        run: |
+          echo "печатаем значение секрета прямо: $TOKEN"
+          echo "и его же через выражение: ${{ secrets.DEMO_SECRET }}"
+          echo "длина: ${#TOKEN}"
+
+      - name: Намеренно падающий шаг
+        id: boom
+        continue-on-error: true
+        run: exit 3
+
+      # Статусные функции разрешены ТОЛЬКО в if:, внутри run: они не работают —
+      # actionlint сообщает об этом до запуска.
+      - name: Шаг с if success()
+        if: success()
+        run: 'echo "success() истинно — шагов с провалом не было"'
+
+      - name: Шаг с if failure()
+        if: failure()
+        run: 'echo "failure() истинно — этого шага в журнале быть не должно"'
+
+      - name: Шаг с if always()
+        if: always()
+        run: |
+          echo "always() сработал, раз вы это видите"
+          echo "исход падавшего шага: ${{ steps.boom.outcome }} / ${{ steps.boom.conclusion }}"

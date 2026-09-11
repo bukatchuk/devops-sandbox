@@ -1,0 +1,48 @@
+# Джобы: параллельность, зависимости, изоляция, передача значений.
+name: 02 jobs
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/02-jobs.yml'
+
+jobs:
+  # first и second не связаны ничем, поэтому идут одновременно
+  first:
+    runs-on: ubuntu-latest
+    outputs:
+      answer: ${{ steps.calc.outputs.answer }}
+    steps:
+      - id: calc
+        run: |
+          date -u +'%H:%M:%S начало first'
+          sleep 20
+          echo "answer=42" >> "$GITHUB_OUTPUT"
+          echo "hello from first" > /tmp/from-first.txt
+          date -u +'%H:%M:%S конец first'
+
+  second:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          date -u +'%H:%M:%S начало second'
+          sleep 20
+          date -u +'%H:%M:%S конец second'
+
+  # third ждёт обе: needs делает выполнение последовательным
+  third:
+    runs-on: ubuntu-latest
+    needs: [first, second]
+    steps:
+      - name: Значение из другой джобы приходит через outputs
+        run: echo "first отдала answer=${{ needs.first.outputs.answer }}"
+      - name: А файл из другой джобы не приходит никак
+        run: |
+          if [ -f /tmp/from-first.txt ]; then
+            echo "файл виден — джобы делят машину"
+          else
+            echo "файла нет — у каждой джобы своя машина"
+          fi
+      - name: Имя раннера у этой джобы
+        run: echo "$RUNNER_NAME на $RUNNER_OS, рабочий каталог $GITHUB_WORKSPACE"
