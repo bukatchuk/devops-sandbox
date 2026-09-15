@@ -4,7 +4,7 @@
 def rate(name: str, table: dict[str, int] | None = None) -> int:
     """Возвращает коэффициент по имени. Неизвестное имя — единица."""
     table = table or {"fast": 3, "slow": 1}
-    return table.get(name, 99)  # дефект для опыта
+    return table.get(name, 1)
 
 
 def total(names: list[str]) -> int:
