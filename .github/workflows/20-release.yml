@@ -1,0 +1,86 @@
+# Выпуск релиза: тег, changelog, объект релиза с артефактом.
+# Тег здесь создаёт человек (git tag && git push --tags) либо этот воркфлоу
+# по кнопке. Ключевая мысль урока: тег — это ТОЧКА ОТСЧЁТА, от которой
+# потом считают всё остальное, поэтому он должен указывать на проверенный
+# коммит, а не на «то, что было в момент выпуска».
+name: 20 release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'версия релиза, например v1.0.0'
+        required: true
+        type: string
+      draft:
+        description: 'черновик (не публиковать сразу)'
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: write     # нужно для создания тега и релиза
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0    # нужна вся история: changelog считается по ней
+
+      - name: Проверить, что версии ещё нет
+        shell: bash
+        run: |
+          if git rev-parse "${{ inputs.version }}" >/dev/null 2>&1; then
+            echo "тег ${{ inputs.version }} уже существует — выпускать нечего"
+            exit 1
+          fi
+          echo "версия свободна"
+
+      - name: Собрать changelog
+        id: notes
+        shell: bash
+        run: |
+          prev=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          echo "предыдущий тег: ${prev:-нет}"
+          if [ -n "$prev" ]; then
+            git log "$prev..HEAD" --no-merges --pretty='- %s (%h)' > notes.md
+          else
+            git log --no-merges --pretty='- %s (%h)' | head -20 > notes.md
+          fi
+          echo "изменений: $(wc -l < notes.md)"
+          {
+            echo "notes<<EOT"
+            cat notes.md
+            echo "EOT"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Собрать артефакт релиза
+        shell: bash
+        run: |
+          mkdir -p dist
+          tar -czf "dist/demo-${{ inputs.version }}.tar.gz" app tests requirements.txt
+          ls -l dist/
+          sha256sum "dist/demo-${{ inputs.version }}.tar.gz" > dist/SHA256SUMS
+          cat dist/SHA256SUMS
+
+      - name: Создать релиз
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          VERSION: ${{ inputs.version }}
+          TARGET: ${{ github.sha }}
+          DRAFT: ${{ inputs.draft }}
+          NOTES_FILE: notes.md
+        # Значения передаются окружением, а не подстановкой в текст команды:
+        # так они не попадают в журнал и не ломаются на кавычках.
+        run: python3 tools/make-release.py
+
+      - name: Артефакты сборки рядом с релизом
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-${{ inputs.version }}
+          path: dist/
+          retention-days: 1
