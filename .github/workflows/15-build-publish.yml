@@ -1,0 +1,80 @@
+# Сборка образа в пайплайне и публикация в реестр.
+# Реестр здесь локальный (сервисный контейнер registry:3 на раннере):
+# урок показывает механику, ничего не оставляя снаружи.
+name: 15 build and publish
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/15-build-publish.yml'
+      - 'app-image/**'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    services:
+      registry:
+        image: registry:3
+        ports:
+          - 5000:5000
+    steps:
+      - uses: actions/checkout@v7
+
+      # buildx с сетью хоста: иначе сборщик не достучится до localhost:5000
+      - uses: docker/setup-buildx-action@v4
+        with:
+          driver-opts: network=host
+
+      # Схема тегов: metadata-action собирает их из события и коммита
+      - name: Посчитать теги и метки
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: localhost:5000/demo
+          tags: |
+            type=sha,format=long
+            type=ref,event=branch
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Что нагенерировала схема тегов
+        shell: bash
+        run: |
+          echo "теги:"
+          printf '%s\n' '${{ steps.meta.outputs.tags }}' | sed 's/^/  /'
+          echo "метки:"
+          printf '%s\n' '${{ steps.meta.outputs.labels }}' | sed 's/^/  /'
+
+      - name: Сборка и публикация (первый раз, кэш пуст)
+        id: first
+        uses: docker/build-push-action@v7
+        with:
+          context: ./app-image
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Что оказалось в реестре
+        shell: bash
+        run: |
+          echo "репозитории: $(curl -s http://localhost:5000/v2/_catalog)"
+          echo "теги:        $(curl -s http://localhost:5000/v2/demo/tags/list)"
+          echo "digest образа из шага сборки: ${{ steps.first.outputs.digest }}"
+
+      - name: Привязка образа к коммиту
+        shell: bash
+        run: |
+          set -euo pipefail
+          digest='${{ steps.first.outputs.digest }}'
+          curl -s -H 'Accept: application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json' \
+               "http://localhost:5000/v2/demo/manifests/${digest}" -o /tmp/manifest.json
+          cfg=$(jq -r '.config.digest' /tmp/manifest.json)
+          curl -s "http://localhost:5000/v2/demo/blobs/${cfg}" -o /tmp/config.json
+          echo "метки в конфигурации образа:"
+          jq -r '.config.Labels | to_entries[] | "  \(.key) = \(.value)"' /tmp/config.json | grep -E 'revision|source|created|version' || true
+          echo "коммит прогона: ${{ github.sha }}"
