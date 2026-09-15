@@ -47,7 +47,10 @@ jobs:
           if [ -n "$prev" ]; then
             git log "$prev..HEAD" --no-merges --pretty='- %s (%h)' > notes.md
           else
-            git log --no-merges --pretty='- %s (%h)' | head -20 > notes.md
+            # -n 20 вместо | head -20: при shell bash действует pipefail,
+            # и закрытый head даёт команде SIGPIPE — шаг падает с кодом 141.
+            # Ровно эта ловушка разбиралась в уроке 08.02.
+            git log --no-merges -n 20 --pretty='- %s (%h)' > notes.md
           fi
           echo "изменений: $(wc -l < notes.md)"
           {
