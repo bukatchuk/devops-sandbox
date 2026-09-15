@@ -1,0 +1,105 @@
+# Проверки качества: что блокирует слияние, а что нет.
+name: 16 quality
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    paths:
+      - '.github/workflows/16-quality.yml'
+      - 'app/**'
+      - 'tests/**'
+      - 'pyproject.toml'
+
+permissions:
+  contents: read
+
+jobs:
+  # Быстрые проверки идут первыми и параллельно: их результат нужен через секунды
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - run: pip install ruff==0.14.6
+      - name: Линтер
+        run: ruff check --output-format=github .
+
+  types:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - run: pip install mypy==1.19.1
+      - name: Проверка типов
+        run: mypy
+
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - run: pip install -r requirements.txt pytest-cov==7.0.0
+
+      - name: Тесты с покрытием и порогом
+        id: cov
+        continue-on-error: true
+        run: |
+          pytest --cov --cov-report=term --cov-report=xml --cov-fail-under=90 --junitxml=report.xml
+
+      - name: Что вернул прогон
+        shell: bash
+        run: |
+          echo "исход шага тестов: ${{ steps.cov.outcome }}"
+          echo "покрытие из отчёта:"
+          python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+          root = ET.parse("coverage.xml").getroot()
+          rate = float(root.get("line-rate", 0)) * 100
+          print("  строк покрыто: %.1f %%" % rate)
+          PY
+          echo "тесты из junit:"
+          python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+          s = ET.parse("report.xml").getroot().find("testsuite")
+          print("  всего %s, упало %s, ошибок %s, пропущено %s, время %s с" % (
+              s.get("tests"), s.get("failures"), s.get("errors"), s.get("skipped"), s.get("time")))
+          PY
+
+      # Отчёт нужен и при падении тестов — иначе разбирать будет нечего
+      - name: Сохранить отчёты
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-reports
+          path: |
+            report.xml
+            coverage.xml
+          retention-days: 1
+
+      - name: Сводка в интерфейс прогона
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "### Качество"
+            echo ""
+            echo "| проверка | итог |"
+            echo "|---|---|"
+            echo "| тесты и порог покрытия | ${{ steps.cov.outcome }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Ворота
+        shell: bash
+        run: |
+          if [ "${{ steps.cov.outcome }}" != "success" ]; then
+            echo "порог покрытия не пройден — дальше не идём"
+            exit 1
+          fi
+          echo "порог пройден"
