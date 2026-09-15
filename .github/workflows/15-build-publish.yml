@@ -135,3 +135,52 @@ jobs:
           done
           echo "слои совпадают: $(cmp -s <(jq -S '.rootfs' /tmp/cfg-latest.json) <(jq -S '.rootfs' /tmp/cfg-repeat.json) && echo да || echo нет)"
           echo "конфигурации совпадают: $(cmp -s <(jq -S 'del(.created,.history)' /tmp/cfg-latest.json) <(jq -S 'del(.created,.history)' /tmp/cfg-repeat.json) && echo да || echo нет)"
+
+  # Отдельная джоба: тот же Dockerfile, но две платформы.
+  multiplatform:
+    runs-on: ubuntu-latest
+    services:
+      registry:
+        image: registry:3
+        ports:
+          - 5000:5000
+    steps:
+      - uses: actions/checkout@v7
+
+      # Для чужой архитектуры нужен эмулятор — его ставит QEMU-действие
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+        with:
+          driver-opts: network=host
+
+      - name: Сборка под одну платформу (для сравнения)
+        id: one
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./app-image/Dockerfile
+          push: true
+          tags: localhost:5000/demo:amd64-only
+          platforms: linux/amd64
+
+      - name: Сборка под две платформы
+        id: two
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./app-image/Dockerfile
+          push: true
+          tags: localhost:5000/demo:multi
+          platforms: linux/amd64,linux/arm64
+
+      - name: Что оказалось под тегом multi
+        shell: bash
+        run: |
+          set -euo pipefail
+          ACCEPT='application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json'
+          curl -s -H "Accept: $ACCEPT" http://localhost:5000/v2/demo/manifests/multi -o /tmp/multi.json
+          echo "тип: $(jq -r .mediaType /tmp/multi.json), записей: $(jq -r '.manifests | length' /tmp/multi.json)"
+          jq -r '.manifests[] | "  \(.platform.os)/\(.platform.architecture)  \(.size) байт  \(.digest[0:19])"' /tmp/multi.json
+          echo "для сравнения тег amd64-only:"
+          curl -s -H "Accept: $ACCEPT" http://localhost:5000/v2/demo/manifests/amd64-only -o /tmp/one.json
+          jq -r '.manifests[] | "  \(.platform.os)/\(.platform.architecture)"' /tmp/one.json
