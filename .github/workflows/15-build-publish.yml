@@ -113,8 +113,25 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Одинаковый ли получился образ
+      - name: Одинаковый ли получился образ и почему
         shell: bash
         run: |
+          set -euo pipefail
           echo "первая сборка:  ${{ steps.first.outputs.digest }}"
           echo "вторая сборка:  ${{ steps.second.outputs.digest }}"
+          ACCEPT='application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json'
+          # Сравниваем не сами образы, а их конфигурации: слои-то кэшированы
+          for pair in "latest:${{ steps.first.outputs.digest }}" "repeat:${{ steps.second.outputs.digest }}"; do
+            name=${pair%%:*}; dg=${pair#*:}
+            curl -s -H "Accept: $ACCEPT" "http://localhost:5000/v2/demo/manifests/${dg}" -o /tmp/t.json
+            img=$(jq -r '.manifests[]? | select(.platform.architecture != "unknown") | .digest' /tmp/t.json | head -1)
+            [ -n "$img" ] || img="$dg"
+            curl -s -H "Accept: $ACCEPT" "http://localhost:5000/v2/demo/manifests/${img}" -o /tmp/m.json
+            cfg=$(jq -r '.config.digest' /tmp/m.json)
+            curl -s "http://localhost:5000/v2/demo/blobs/${cfg}" -o "/tmp/cfg-${name}.json"
+            echo "--- $name ---"
+            echo "  слои:  $(jq -r '.rootfs.diff_ids | join(",")' "/tmp/cfg-${name}.json" | cut -c1-70)"
+            echo "  метки: $(jq -r '.config.Labels // {} | length' "/tmp/cfg-${name}.json") штук"
+          done
+          echo "слои совпадают: $(cmp -s <(jq -S '.rootfs' /tmp/cfg-latest.json) <(jq -S '.rootfs' /tmp/cfg-repeat.json) && echo да || echo нет)"
+          echo "конфигурации совпадают: $(cmp -s <(jq -S 'del(.created,.history)' /tmp/cfg-latest.json) <(jq -S 'del(.created,.history)' /tmp/cfg-repeat.json) && echo да || echo нет)"
