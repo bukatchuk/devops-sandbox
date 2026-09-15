@@ -69,15 +69,52 @@ jobs:
           echo "теги:        $(curl -s http://localhost:5000/v2/demo/tags/list)"
           echo "digest образа из шага сборки: ${{ steps.first.outputs.digest }}"
 
-      - name: Привязка образа к коммиту
+      - name: Что на самом деле лежит под тегом
         shell: bash
         run: |
           set -euo pipefail
+          ACCEPT='application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.docker.distribution.manifest.v2+json'
           digest='${{ steps.first.outputs.digest }}'
-          curl -s -H 'Accept: application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json' \
-               "http://localhost:5000/v2/demo/manifests/${digest}" -o /tmp/manifest.json
+          curl -s -H "Accept: $ACCEPT" "http://localhost:5000/v2/demo/manifests/${digest}" -o /tmp/top.json
+          echo "тип верхнего объекта: $(jq -r '.mediaType' /tmp/top.json)"
+          echo "записей внутри: $(jq -r '.manifests | length // 0' /tmp/top.json)"
+          jq -r '.manifests[]? | "  \(.mediaType) platform=\(.platform.os)/\(.platform.architecture)"' /tmp/top.json
+          # Записи с platform unknown/unknown — это удостоверение сборки, а не образ.
+          img=$(jq -r '.manifests[]? | select(.platform.architecture != "unknown") | .digest' /tmp/top.json | head -1)
+          if [ -z "$img" ]; then img="$digest"; fi
+          curl -s -H "Accept: $ACCEPT" "http://localhost:5000/v2/demo/manifests/${img}" -o /tmp/manifest.json
           cfg=$(jq -r '.config.digest' /tmp/manifest.json)
           curl -s "http://localhost:5000/v2/demo/blobs/${cfg}" -o /tmp/config.json
           echo "метки в конфигурации образа:"
-          jq -r '.config.Labels | to_entries[] | "  \(.key) = \(.value)"' /tmp/config.json | grep -E 'revision|source|created|version' || true
+          jq -r '.config.Labels // {} | to_entries[] | "  \(.key) = \(.value)"' /tmp/config.json \
+            | grep -E 'revision|source|created|version' || echo "  меток нет"
           echo "коммит прогона: ${{ github.sha }}"
+
+      - name: Неизменяемый указатель против подвижного тега
+        shell: bash
+        run: |
+          set -euo pipefail
+          for t in latest main; do
+            d=$(curl -sI -H 'Accept: application/vnd.oci.image.index.v1+json' \
+                "http://localhost:5000/v2/demo/manifests/$t" \
+                | tr -d '\r' | awk -F': ' '/[Dd]ocker-[Cc]ontent-[Dd]igest/ {print $2}')
+            echo "  тег $t -> $d"
+          done
+          echo "  digest из сборки -> ${{ steps.first.outputs.digest }}"
+
+      - name: Повторная сборка того же самого (кэш уже есть)
+        id: second
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./app-image/Dockerfile
+          push: true
+          tags: localhost:5000/demo:repeat
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Одинаковый ли получился образ
+        shell: bash
+        run: |
+          echo "первая сборка:  ${{ steps.first.outputs.digest }}"
+          echo "вторая сборка:  ${{ steps.second.outputs.digest }}"
