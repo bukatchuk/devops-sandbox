@@ -1,0 +1,68 @@
+# Выкат из пайплайна: окружения, порядок и ручное подтверждение.
+# Настоящего сервера здесь нет — «деплой» печатает, что он сделал бы.
+# Смысл воркфлоу в другом: показать механику окружений и зависимостей,
+# которая одинакова независимо от способа доставки.
+name: 18 deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'версия для выката'
+        required: false
+        default: 'sha'
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: v
+        shell: bash
+        run: |
+          v="${{ inputs.version }}"
+          [ "$v" = "sha" ] && v="sha-${GITHUB_SHA::7}"
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "собрана версия $v"
+
+  # Тестовая среда: выкатывается сама, без подтверждения
+  deploy-staging:
+    runs-on: ubuntu-latest
+    needs: build
+    environment:
+      name: staging
+      url: https://staging.example.invalid
+    steps:
+      - name: Выкат в staging
+        shell: bash
+        run: |
+          echo "выкатываю ${{ needs.build.outputs.version }} в staging"
+          echo "окружение задания: $GITHUB_ENV_NAME"
+      - name: Проверка после выката
+        shell: bash
+        run: echo "дым-тест staging пройден"
+
+  # Продакшен: зависит от staging и требует подтверждения человеком,
+  # если у окружения настроено правило. Правило ставится в настройках
+  # репозитория, а не в файле воркфлоу — это важная деталь.
+  deploy-prod:
+    runs-on: ubuntu-latest
+    needs: [build, deploy-staging]
+    environment:
+      name: prod
+      url: https://prod.example.invalid
+    steps:
+      - name: Выкат в prod
+        shell: bash
+        run: |
+          echo "выкатываю ${{ needs.build.outputs.version }} в prod"
+          echo "время начала: $(date -u +%T)"
+      - name: Проверка после выката
+        shell: bash
+        run: echo "дым-тест prod пройден"
