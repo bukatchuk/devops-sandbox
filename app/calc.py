@@ -9,3 +9,5 @@ def rate(name: str, table: dict[str, int] | None = None) -> int:
 
 def total(names: list[str]) -> int:
     return sum(rate(n) for n in names)
+
+# строка для второго опыта с защитой ветки
