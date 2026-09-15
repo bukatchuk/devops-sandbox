@@ -1,0 +1,123 @@
+# Проверки безопасности: зависимости, код, образ, состав (SBOM).
+# Все они здесь НЕ блокирующие по умолчанию — это осознанный выбор,
+# разобранный в уроке: сначала смотрим на объём находок, потом решаем,
+# что делать блокирующим.
+name: 17 security
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/17-security.yml'
+      - 'insecure/**'
+      - 'requirements.txt'
+
+permissions:
+  contents: read
+
+jobs:
+  # SCA: уязвимости в зависимостях
+  deps:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - run: pip install pip-audit==2.9.0
+
+      - name: Рабочие зависимости
+        id: real
+        continue-on-error: true
+        run: pip-audit -r requirements.txt --progress-spinner off
+
+      - name: Заведомо старые зависимости (учебный стенд)
+        id: old
+        continue-on-error: true
+        run: pip-audit -r insecure/requirements-old.txt --progress-spinner off
+
+      - name: Разница
+        shell: bash
+        run: |
+          echo "рабочие:      ${{ steps.real.outcome }}"
+          echo "учебные старые: ${{ steps.old.outcome }}"
+
+  # SAST: дефекты в коде
+  code:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - run: pip install bandit==1.9.2
+
+      - name: Анализ кода
+        id: bandit
+        continue-on-error: true
+        run: bandit -q -r app insecure -f screen
+
+      - name: Только высокая важность — вот это уже ворота
+        run: bandit -q -r app insecure --severity-level high
+
+  # Сканирование образа и SBOM
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Собрать образ
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./app-image/Dockerfile
+          push: false
+          load: true
+          tags: demo:scan
+
+      - name: Сканировать образ
+        uses: aquasecurity/trivy-action@0.36.0
+        with:
+          image-ref: demo:scan
+          format: json
+          output: trivy.json
+          severity: HIGH,CRITICAL
+          exit-code: '0'
+
+      - name: Состав образа (SBOM в формате CycloneDX)
+        uses: aquasecurity/trivy-action@0.36.0
+        with:
+          image-ref: demo:scan
+          format: cyclonedx
+          output: sbom.cdx.json
+          scan-type: image
+
+      - name: Что нашли и из чего состоит образ
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          scan = json.load(open("trivy.json"))
+          vulns = [v for r in (scan.get("Results") or []) for v in (r.get("Vulnerabilities") or [])]
+          fixable = [v for v in vulns if v.get("FixedVersion")]
+          print("уязвимостей HIGH+CRITICAL: %d, из них исправимо: %d" % (len(vulns), len(fixable)))
+          sbom = json.load(open("sbom.cdx.json"))
+          comps = sbom.get("components") or []
+          print("компонентов в SBOM: %d" % len(comps))
+          kinds = {}
+          for c in comps:
+              kinds[c.get("type", "?")] = kinds.get(c.get("type", "?"), 0) + 1
+          print("по типам: %s" % kinds)
+          print("формат: %s, версия спецификации: %s" % (sbom.get("bomFormat"), sbom.get("specVersion")))
+          PY
+
+      - name: Сохранить SBOM и отчёт
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: security-reports
+          path: |
+            trivy.json
+            sbom.cdx.json
+          retention-days: 1
