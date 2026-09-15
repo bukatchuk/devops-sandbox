@@ -1,0 +1,93 @@
+# Стратегия выката в пайплайне: выбор делается параметром, а не новым воркфлоу.
+# Сам выкат здесь имитируется — смысл в механике: как стратегия влияет
+# на порядок шагов, на проверки между ними и на возможность остановиться.
+name: 19 strategies
+
+on:
+  workflow_dispatch:
+    inputs:
+      strategy:
+        description: 'стратегия выката'
+        required: true
+        default: rolling
+        type: choice
+        options: [rolling, blue-green, canary]
+      canary_percent:
+        description: 'доля трафика на канарейку, % (только для canary)'
+        required: false
+        default: '10'
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Выбранная стратегия
+        shell: bash
+        run: 'echo "выбранная стратегия — ${{ inputs.strategy }}"'
+
+      # Rolling: узлы заменяются по очереди, между ними проверка
+      - name: Rolling — замена узлов по очереди
+        if: inputs.strategy == 'rolling'
+        shell: bash
+        run: |
+          for node in node-1 node-2 node-3; do
+            echo "вывожу $node из балансировки"
+            echo "обновляю $node"
+            echo "проверяю готовность $node"
+            echo "возвращаю $node в балансировку"
+          done
+
+      # Blue-green: новая среда поднимается целиком, потом переключение
+      - name: Blue-green — поднять зелёную среду
+        if: inputs.strategy == 'blue-green'
+        shell: bash
+        run: |
+          echo "поднимаю зелёную среду рядом с синей"
+          echo "жду готовности всех узлов зелёной"
+          echo "прогоняю дым-тесты по зелёной, трафика на ней ещё нет"
+
+      - name: Blue-green — переключить трафик
+        if: inputs.strategy == 'blue-green'
+        shell: bash
+        run: |
+          echo "переключаю балансировщик на зелёную"
+          echo "синяя остаётся поднятой: откат — обратное переключение"
+
+      # Canary: доля трафика, наблюдение, решение
+      - name: Canary — выпустить на часть трафика
+        if: inputs.strategy == 'canary'
+        shell: bash
+        run: |
+          echo "направляю ${{ inputs.canary_percent }} % трафика на новую версию"
+          echo "наблюдаю метрики САМОГО узла, а не общую долю ошибок"
+          echo "(балансировщик может скрывать сбои повторами — см. урок 08.10)"
+
+      - name: Canary — решение по метрикам
+        if: inputs.strategy == 'canary'
+        shell: bash
+        run: |
+          echo "если метрики узла в норме — увеличиваю долю"
+          echo "если нет — убираю узел из балансировки, это и есть откат"
+
+      - name: Итог
+        shell: bash
+        run: |
+          {
+            echo "### Выкат: ${{ inputs.strategy }}"
+            echo ""
+            echo "| свойство | значение |"
+            echo "|---|---|"
+            echo "| ресурсы на время выката | ${{ inputs.strategy == 'blue-green' && 'двойные' || 'обычные' }} |"
+            rollback="выкат предыдущей версии"
+            [ "${{ inputs.strategy }}" = "blue-green" ] && rollback="переключение обратно"
+            echo "| откат | $rollback |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "сводка записана"
