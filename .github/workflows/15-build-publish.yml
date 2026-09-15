@@ -52,7 +52,10 @@ jobs:
         id: first
         uses: docker/build-push-action@v7
         with:
-          context: ./app-image
+          # Контекст — корень репозитория: код лежит там, а Dockerfile отдельно.
+          # Путать эти две вещи — типичная ошибка, она стоила одного прогона.
+          context: .
+          file: ./app-image/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
