@@ -48,9 +48,10 @@ jobs:
           terraform show -json tfplan.bin > plan.json
 
       - name: policy (conftest)
+        working-directory: ${{ github.workspace }}
         run: |
-          docker run --rm -v "$PWD:/p:ro" openpolicyagent/conftest:latest \
-            test /p/plan.json -p /p/../policy
+          docker run --rm -v "$PWD:/w:ro" openpolicyagent/conftest:latest \
+            test /w/infra/plan.json -p /w/policy
 
       - name: plan summary comment
         if: always()
