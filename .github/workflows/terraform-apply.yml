@@ -1,0 +1,34 @@
+# Применение по merge: только push в main, с ручным одобрением окружения.
+# Правило одобрения (required reviewers) задаётся в НАСТРОЙКАХ окружения prod,
+# а не в этом файле (08.09). Удалённый backend обязателен, иначе apply на
+# эфемерном раннере не увидит прежнее состояние.
+name: terraform-apply
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "infra/**"
+
+permissions:
+  contents: read
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    environment: prod
+    defaults:
+      run:
+        working-directory: infra
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "1.5.7"
+
+      - name: init
+        run: terraform init -input=false
+
+      - name: apply
+        run: terraform apply -input=false -auto-approve

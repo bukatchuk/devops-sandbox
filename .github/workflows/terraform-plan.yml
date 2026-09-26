@@ -1,0 +1,83 @@
+# План в PR: проверки качества, политика и план — БЕЗ применения.
+# Запускается на каждый pull request, меняющий infra/.
+# Примечание: в реальном проекте init использует удалённый backend (11.04),
+# чтобы план отражал фактическое состояние; здесь backend локальный (учебный).
+name: terraform-plan
+
+on:
+  pull_request:
+    paths:
+      - "infra/**"
+      - ".github/workflows/terraform-plan.yml"
+
+permissions:
+  contents: read
+  pull-requests: write # чтобы оставить сводку плана комментарием к PR
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "1.5.7"
+
+      - name: fmt
+        run: terraform fmt -recursive -check
+
+      - name: init
+        run: terraform init -input=false
+
+      - name: validate
+        run: terraform validate
+
+      - uses: terraform-linters/setup-tflint@v6
+        with:
+          tflint_version: v0.61.0
+      - name: tflint
+        run: tflint --chdir=.
+
+      - name: plan
+        run: |
+          terraform plan -input=false -out=tfplan.bin
+          terraform show -json tfplan.bin > plan.json
+
+      - name: policy (conftest)
+        run: |
+          docker run --rm -v "$PWD:/p:ro" openpolicyagent/conftest:latest \
+            test /p/plan.json -p /p/../policy
+
+      - name: plan summary comment
+        if: always()
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const fs = require('fs');
+            let add = 0, change = 0, destroy = 0;
+            try {
+              const plan = JSON.parse(fs.readFileSync('infra/plan.json', 'utf8'));
+              for (const rc of plan.resource_changes || []) {
+                const a = rc.change.actions;
+                if (a.includes('create')) add++;
+                if (a.includes('update')) change++;
+                if (a.includes('delete')) destroy++;
+              }
+            } catch (e) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: 'terraform plan не построен — смотрите журнал задачи.',
+              });
+              return;
+            }
+            const body = `### terraform plan\n`
+              + `Создать: **${add}**, изменить: **${change}**, удалить: **${destroy}**.`;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner, repo: context.repo.repo,
+              issue_number: context.issue.number, body,
+            });
