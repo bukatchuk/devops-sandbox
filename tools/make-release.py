@@ -13,11 +13,10 @@
   NOTES_FILE   файл с текстом changelog
 """
 
+import http.client
 import json
 import os
 import sys
-import urllib.error
-import urllib.request
 
 
 def main() -> int:
@@ -34,24 +33,29 @@ def main() -> int:
         "target_commitish": os.environ.get("TARGET", "main"),
     }).encode()
 
-    req = urllib.request.Request(
-        "https://api.github.com/repos/%s/releases" % repo,
-        data=payload,
-        headers={
-            "Authorization": "Bearer " + token,
-            "Accept": "application/vnd.github+json",
-            "Content-Type": "application/json",
-            "User-Agent": "devops-course-release",
-        },
-    )
+    # Хост фиксирован: схема и адрес не зависят от входных данных.
+    conn = http.client.HTTPSConnection("api.github.com", timeout=30)
     try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            data = json.load(resp)
-            code = resp.status
-    except urllib.error.HTTPError as exc:
-        body = exc.read().decode("utf-8", "replace")
-        print("GitHub ответил %s: %s" % (exc.code, body[:200]))
+        conn.request(
+            "POST",
+            "/repos/%s/releases" % repo,
+            body=payload,
+            headers={
+                "Authorization": "Bearer " + token,
+                "Accept": "application/vnd.github+json",
+                "Content-Type": "application/json",
+                "User-Agent": "devops-course-release",
+            },
+        )
+        resp = conn.getresponse()
+        raw = resp.read().decode("utf-8", "replace")
+        code = resp.status
+    finally:
+        conn.close()
+    if code >= 400:
+        print("GitHub ответил %s: %s" % (code, raw[:200]))
         return 1
+    data = json.loads(raw)
 
     print("код ответа:      %s" % code)
     print("релиз:           %s" % data.get("html_url"))

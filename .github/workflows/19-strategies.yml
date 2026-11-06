@@ -33,7 +33,9 @@ jobs:
 
       - name: Выбранная стратегия
         shell: bash
-        run: 'echo "выбранная стратегия — ${{ inputs.strategy }}"'
+        env:
+          STRATEGY: ${{ inputs.strategy }}
+        run: 'echo "выбранная стратегия — ${STRATEGY}"'
 
       # Rolling: узлы заменяются по очереди, между ними проверка
       - name: Rolling — замена узлов по очереди
@@ -83,15 +85,18 @@ jobs:
 
       - name: Итог
         shell: bash
+        env:
+          STRATEGY: ${{ inputs.strategy }}
+          RESOURCES: ${{ inputs.strategy == 'blue-green' && 'двойные' || 'обычные' }}
         run: |
           {
-            echo "### Выкат: ${{ inputs.strategy }}"
+            echo "### Выкат: ${STRATEGY}"
             echo ""
             echo "| свойство | значение |"
             echo "|---|---|"
-            echo "| ресурсы на время выката | ${{ inputs.strategy == 'blue-green' && 'двойные' || 'обычные' }} |"
+            echo "| ресурсы на время выката | ${RESOURCES} |"
             rollback="выкат предыдущей версии"
-            [ "${{ inputs.strategy }}" = "blue-green" ] && rollback="переключение обратно"
+            [ "${STRATEGY}" = "blue-green" ] && rollback="переключение обратно"
             echo "| откат | $rollback |"
           } >> "$GITHUB_STEP_SUMMARY"
           echo "сводка записана"
