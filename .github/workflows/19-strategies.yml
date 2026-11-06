@@ -27,11 +27,15 @@ jobs:
     environment:
       name: staging
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
 
       - name: Выбранная стратегия
         shell: bash
-        run: 'echo "выбранная стратегия — ${{ inputs.strategy }}"'
+        env:
+          STRATEGY: ${{ inputs.strategy }}
+        run: 'echo "выбранная стратегия — ${STRATEGY}"'
 
       # Rolling: узлы заменяются по очереди, между ними проверка
       - name: Rolling — замена узлов по очереди
@@ -66,9 +70,11 @@ jobs:
         if: inputs.strategy == 'canary'
         shell: bash
         run: |
-          echo "направляю ${{ inputs.canary_percent }} % трафика на новую версию"
+          echo "направляю ${INPUTS_CANARY_PERCENT} % трафика на новую версию"
           echo "наблюдаю метрики САМОГО узла, а не общую долю ошибок"
           echo "(балансировщик может скрывать сбои повторами — см. урок 08.10)"
+        env:
+          INPUTS_CANARY_PERCENT: ${{ inputs.canary_percent }}
 
       - name: Canary — решение по метрикам
         if: inputs.strategy == 'canary'
@@ -79,15 +85,18 @@ jobs:
 
       - name: Итог
         shell: bash
+        env:
+          STRATEGY: ${{ inputs.strategy }}
+          RESOURCES: ${{ inputs.strategy == 'blue-green' && 'двойные' || 'обычные' }}
         run: |
           {
-            echo "### Выкат: ${{ inputs.strategy }}"
+            echo "### Выкат: ${STRATEGY}"
             echo ""
             echo "| свойство | значение |"
             echo "|---|---|"
-            echo "| ресурсы на время выката | ${{ inputs.strategy == 'blue-green' && 'двойные' || 'обычные' }} |"
+            echo "| ресурсы на время выката | ${RESOURCES} |"
             rollback="выкат предыдущей версии"
-            [ "${{ inputs.strategy }}" = "blue-green" ] && rollback="переключение обратно"
+            [ "${STRATEGY}" = "blue-green" ] && rollback="переключение обратно"
             echo "| откат | $rollback |"
           } >> "$GITHUB_STEP_SUMMARY"
           echo "сводка записана"

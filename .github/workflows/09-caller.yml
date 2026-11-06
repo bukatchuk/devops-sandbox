@@ -9,14 +9,17 @@ on:
       - '.github/workflows/08-reusable.yml'
       - '.github/actions/report/action.yml'
 
+permissions:
+  contents: read
+
 jobs:
   call-313:
-    uses: ./.github/workflows/08-reusable.yml
+    uses: $/.github/workflows/08-reusable.yml
     with:
       python: '3.13'
 
   call-312:
-    uses: ./.github/workflows/08-reusable.yml
+    uses: $/.github/workflows/08-reusable.yml
     with:
       python: '3.12'
 
@@ -24,7 +27,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: [call-313, call-312]
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - name: Составное действие одним шагом
         id: report
         uses: ./.github/actions/report
@@ -33,6 +38,10 @@ jobs:
       - name: Что вернули вызванные воркфлоу
         shell: bash
         run: |
-          echo "call-313 отдал: ${{ needs.call-313.outputs.tested }}"
-          echo "call-312 отдал: ${{ needs.call-312.outputs.tested }}"
-          echo "составное действие отдало: ${{ steps.report.outputs.line }}"
+          echo "call-313 отдал: ${NEEDS_CALL_313_OUTPUTS_TESTED}"
+          echo "call-312 отдал: ${NEEDS_CALL_312_OUTPUTS_TESTED}"
+          echo "составное действие отдало: ${STEPS_REPORT_OUTPUTS_LINE}"
+        env:
+          NEEDS_CALL_313_OUTPUTS_TESTED: ${{ needs.call-313.outputs.tested }}
+          NEEDS_CALL_312_OUTPUTS_TESTED: ${{ needs.call-312.outputs.tested }}
+          STEPS_REPORT_OUTPUTS_LINE: ${{ steps.report.outputs.line }}

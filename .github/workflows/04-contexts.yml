@@ -14,19 +14,31 @@ on:
     paths:
       - '.github/workflows/04-contexts.yml'
 
+permissions:
+  contents: read
+
 jobs:
   contexts:
     runs-on: ubuntu-latest
     steps:
       - name: Что лежит в контекстах
         run: |
-          echo "событие:      ${{ github.event_name }}"
-          echo "ссылка:       ${{ github.ref }}"
-          echo "коммит:       ${{ github.sha }}"
-          echo "репозиторий:  ${{ github.repository }}"
-          echo "номер запуска: ${{ github.run_number }}, попытка ${{ github.run_attempt }}"
-          echo "ОС раннера:   ${{ runner.os }}, архитектура ${{ runner.arch }}"
-          echo "ввод mode:    [${{ inputs.mode }}]"
+          echo "событие:      ${EVENT_NAME}"
+          echo "ссылка:       ${GITHUB_REF}"
+          echo "коммит:       ${COMMIT_SHA}"
+          echo "репозиторий:  ${REPOSITORY}"
+          echo "номер запуска: ${RUN_NUMBER}, попытка ${RUN_ATTEMPT}"
+          echo "ОС раннера:   ${RUNNER_OS_NAME}, архитектура ${RUNNER_ARCH_NAME}"
+          echo "ввод mode:    [${INPUT_MODE}]"
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          COMMIT_SHA: ${{ github.sha }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_NUMBER: ${{ github.run_number }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          RUNNER_OS_NAME: ${{ runner.os }}
+          RUNNER_ARCH_NAME: ${{ runner.arch }}
+          INPUT_MODE: ${{ inputs.mode }}
 
       - name: Шаг только для ручного запуска
         if: github.event_name == 'workflow_dispatch'

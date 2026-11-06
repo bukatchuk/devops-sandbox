@@ -22,17 +22,19 @@ jobs:
         ports:
           - 5000:5000
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
 
       # buildx с сетью хоста: иначе сборщик не достучится до localhost:5000
-      - uses: docker/setup-buildx-action@v4
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
         with:
           driver-opts: network=host
 
       # Схема тегов: metadata-action собирает их из события и коммита
       - name: Посчитать теги и метки
         id: meta
-        uses: docker/metadata-action@v6
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
         with:
           images: localhost:5000/demo
           tags: |
@@ -44,13 +46,16 @@ jobs:
         shell: bash
         run: |
           echo "теги:"
-          printf '%s\n' '${{ steps.meta.outputs.tags }}' | sed 's/^/  /'
+          printf '%s\n' '${STEPS_META_OUTPUTS_TAGS}' | sed 's/^/  /'
           echo "метки:"
-          printf '%s\n' '${{ steps.meta.outputs.labels }}' | sed 's/^/  /'
+          printf '%s\n' '${STEPS_META_OUTPUTS_LABELS}' | sed 's/^/  /'
+        env:
+          STEPS_META_OUTPUTS_TAGS: ${{ steps.meta.outputs.tags }}
+          STEPS_META_OUTPUTS_LABELS: ${{ steps.meta.outputs.labels }}
 
       - name: Сборка и публикация (первый раз, кэш пуст)
         id: first
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
           # Контекст — корень репозитория: код лежит там, а Dockerfile отдельно.
           # Путать эти две вещи — типичная ошибка, она стоила одного прогона.
@@ -67,14 +72,16 @@ jobs:
         run: |
           echo "репозитории: $(curl -s http://localhost:5000/v2/_catalog)"
           echo "теги:        $(curl -s http://localhost:5000/v2/demo/tags/list)"
-          echo "digest образа из шага сборки: ${{ steps.first.outputs.digest }}"
+          echo "digest образа из шага сборки: ${STEPS_FIRST_OUTPUTS_DIGEST}"
+        env:
+          STEPS_FIRST_OUTPUTS_DIGEST: ${{ steps.first.outputs.digest }}
 
       - name: Что на самом деле лежит под тегом
         shell: bash
         run: |
           set -euo pipefail
           ACCEPT='application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.docker.distribution.manifest.v2+json'
-          digest='${{ steps.first.outputs.digest }}'
+          digest='${STEPS_FIRST_OUTPUTS_DIGEST}'
           curl -s -H "Accept: $ACCEPT" "http://localhost:5000/v2/demo/manifests/${digest}" -o /tmp/top.json
           echo "тип верхнего объекта: $(jq -r '.mediaType' /tmp/top.json)"
           echo "записей внутри: $(jq -r '.manifests | length // 0' /tmp/top.json)"
@@ -89,6 +96,8 @@ jobs:
           jq -r '.config.Labels // {} | to_entries[] | "  \(.key) = \(.value)"' /tmp/config.json \
             | grep -E 'revision|source|created|version' || echo "  меток нет"
           echo "коммит прогона: ${{ github.sha }}"
+        env:
+          STEPS_FIRST_OUTPUTS_DIGEST: ${{ steps.first.outputs.digest }}
 
       - name: Неизменяемый указатель против подвижного тега
         shell: bash
@@ -100,11 +109,13 @@ jobs:
                 | tr -d '\r' | awk -F': ' '/[Dd]ocker-[Cc]ontent-[Dd]igest/ {print $2}')
             echo "  тег $t -> $d"
           done
-          echo "  digest из сборки -> ${{ steps.first.outputs.digest }}"
+          echo "  digest из сборки -> ${STEPS_FIRST_OUTPUTS_DIGEST}"
+        env:
+          STEPS_FIRST_OUTPUTS_DIGEST: ${{ steps.first.outputs.digest }}
 
       - name: Повторная сборка того же самого (кэш уже есть)
         id: second
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
           context: .
           file: ./app-image/Dockerfile
@@ -117,11 +128,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          echo "первая сборка:  ${{ steps.first.outputs.digest }}"
-          echo "вторая сборка:  ${{ steps.second.outputs.digest }}"
+          echo "первая сборка:  ${STEPS_FIRST_OUTPUTS_DIGEST}"
+          echo "вторая сборка:  ${STEPS_SECOND_OUTPUTS_DIGEST}"
           ACCEPT='application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json'
           # Сравниваем не сами образы, а их конфигурации: слои-то кэшированы
-          for pair in "latest:${{ steps.first.outputs.digest }}" "repeat:${{ steps.second.outputs.digest }}"; do
+          for pair in "latest:${STEPS_FIRST_OUTPUTS_DIGEST}" "repeat:${STEPS_SECOND_OUTPUTS_DIGEST}"; do
             name=${pair%%:*}; dg=${pair#*:}
             curl -s -H "Accept: $ACCEPT" "http://localhost:5000/v2/demo/manifests/${dg}" -o /tmp/t.json
             img=$(jq -r '.manifests[]? | select(.platform.architecture != "unknown") | .digest' /tmp/t.json | head -1)
@@ -135,6 +146,9 @@ jobs:
           done
           echo "слои совпадают: $(cmp -s <(jq -S '.rootfs' /tmp/cfg-latest.json) <(jq -S '.rootfs' /tmp/cfg-repeat.json) && echo да || echo нет)"
           echo "конфигурации совпадают: $(cmp -s <(jq -S 'del(.created,.history)' /tmp/cfg-latest.json) <(jq -S 'del(.created,.history)' /tmp/cfg-repeat.json) && echo да || echo нет)"
+        env:
+          STEPS_FIRST_OUTPUTS_DIGEST: ${{ steps.first.outputs.digest }}
+          STEPS_SECOND_OUTPUTS_DIGEST: ${{ steps.second.outputs.digest }}
 
   # Отдельная джоба: тот же Dockerfile, но две платформы.
   multiplatform:
@@ -145,17 +159,19 @@ jobs:
         ports:
           - 5000:5000
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
 
       # Для чужой архитектуры нужен эмулятор — его ставит QEMU-действие
-      - uses: docker/setup-qemu-action@v4
-      - uses: docker/setup-buildx-action@v4
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
         with:
           driver-opts: network=host
 
       - name: Сборка под одну платформу (для сравнения)
         id: one
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
           context: .
           file: ./app-image/Dockerfile
@@ -165,7 +181,7 @@ jobs:
 
       - name: Сборка под две платформы
         id: two
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
           context: .
           file: ./app-image/Dockerfile

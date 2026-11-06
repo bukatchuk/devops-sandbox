@@ -22,14 +22,18 @@ jobs:
     outputs:
       version: ${{ steps.v.outputs.version }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - id: v
         shell: bash
         run: |
-          v="${{ inputs.version }}"
+          v="${INPUTS_VERSION}"
           [ "$v" = "sha" ] && v="sha-${GITHUB_SHA::7}"
           echo "version=$v" >> "$GITHUB_OUTPUT"
           echo "собрана версия $v"
+        env:
+          INPUTS_VERSION: ${{ inputs.version }}
 
   # Тестовая среда: выкатывается сама, без подтверждения
   deploy-staging:
@@ -42,8 +46,10 @@ jobs:
       - name: Выкат в staging
         shell: bash
         run: |
-          echo "выкатываю ${{ needs.build.outputs.version }} в staging"
+          echo "выкатываю ${NEEDS_BUILD_OUTPUTS_VERSION} в staging"
           echo "окружение задания: $GITHUB_ENV_NAME"
+        env:
+          NEEDS_BUILD_OUTPUTS_VERSION: ${{ needs.build.outputs.version }}
       - name: Проверка после выката
         shell: bash
         run: echo "дым-тест staging пройден"
@@ -61,8 +67,10 @@ jobs:
       - name: Выкат в prod
         shell: bash
         run: |
-          echo "выкатываю ${{ needs.build.outputs.version }} в prod"
+          echo "выкатываю ${NEEDS_BUILD_OUTPUTS_VERSION} в prod"
           echo "время начала: $(date -u +%T)"
+        env:
+          NEEDS_BUILD_OUTPUTS_VERSION: ${{ needs.build.outputs.version }}
       - name: Проверка после выката
         shell: bash
         run: echo "дым-тест prod пройден"

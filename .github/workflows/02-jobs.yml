@@ -7,6 +7,9 @@ on:
     paths:
       - '.github/workflows/02-jobs.yml'
 
+permissions:
+  contents: read
+
 jobs:
   # first и second не связаны ничем, поэтому идут одновременно
   first:
@@ -36,7 +39,9 @@ jobs:
     needs: [first, second]
     steps:
       - name: Значение из другой джобы приходит через outputs
-        run: echo "first отдала answer=${{ needs.first.outputs.answer }}"
+        run: echo "first отдала answer=${NEEDS_FIRST_OUTPUTS_ANSWER}"
+        env:
+          NEEDS_FIRST_OUTPUTS_ANSWER: ${{ needs.first.outputs.answer }}
       - name: А файл из другой джобы не приходит никак
         run: |
           if [ -f /tmp/from-first.txt ]; then
