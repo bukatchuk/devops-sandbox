@@ -32,6 +32,11 @@ def decode_part(part: str) -> dict:
     return json.loads(base64.urlsafe_b64decode(part))
 
 
+def fmt_time(ts: int) -> str:
+    """Время в UTC как ЧЧ:ММ:СС (def вместо lambda — так требует правило E731)."""
+    return dt.datetime.fromtimestamp(ts, dt.UTC).strftime("%H:%M:%S")
+
+
 def main() -> int:
     if len(sys.argv) != 2:
         print(__doc__)
@@ -39,29 +44,31 @@ def main() -> int:
     token = sys.stdin.read().strip() if sys.argv[1] == "-" else sys.argv[1].strip()
     parts = token.split(".")
     if len(parts) != 3:
-        print("это не похоже на JWT: частей %d вместо трёх" % len(parts))
+        print(f"это не похоже на JWT: частей {len(parts)} вместо трёх")
         return 3
 
     header, payload = decode_part(parts[0]), decode_part(parts[1])
-    print("заголовок: %s" % json.dumps(header, ensure_ascii=False))
-    print("полей в токене: %d" % len(payload))
+    print(f"заголовок: {json.dumps(header, ensure_ascii=False)}")
+    print(f"полей в токене: {len(payload)}")
     print()
     print("поля, по которым настраивают доверие:")
     for key in INTERESTING:
         if key in payload:
-            print("  %-22s %s" % (key, payload[key]))
+            print(f"  {key:<22} {payload[key]}")
 
     rest = sorted(set(payload) - set(INTERESTING) - {"iat", "exp", "nbf", "jti"})
     if rest:
         print()
-        print("остальные поля: %s" % ", ".join(rest))
+        print(f"остальные поля: {', '.join(rest)}")
 
     if "iat" in payload and "exp" in payload:
         life = payload["exp"] - payload["iat"]
-        fmt = lambda ts: dt.datetime.fromtimestamp(ts, dt.timezone.utc).strftime("%H:%M:%S")
         print()
-        print("выдан %s UTC, истекает %s UTC — срок жизни %d с (%d мин)"
-              % (fmt(payload["iat"]), fmt(payload["exp"]), life, life // 60))
+        print(
+            f"выдан {fmt_time(payload['iat'])} UTC, "
+            f"истекает {fmt_time(payload['exp'])} UTC — "
+            f"срок жизни {life} с ({life // 60} мин)"
+        )
     return 0
 
 
