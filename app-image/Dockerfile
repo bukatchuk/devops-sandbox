@@ -9,4 +9,6 @@ WORKDIR /app
 COPY --from=build /out /usr/local/lib/python3.13/site-packages
 COPY app/ ./app/
 ENV PYTHONUNBUFFERED=1
+RUN useradd --system --uid 10001 --no-create-home app
+USER app
 CMD ["python3", "-c", "from app.calc import total; print('итог:', total(['fast','slow']))"]
