@@ -46,9 +46,11 @@ jobs:
         shell: bash
         run: |
           echo "теги:"
-          printf '%s\n' '${STEPS_META_OUTPUTS_TAGS}' | sed 's/^/  /'
+          # Значение подставляем в двойных кавычках: в одинарных bash не раскрывает
+          # переменные и напечатал бы буквально ${STEPS_META_OUTPUTS_TAGS}.
+          printf '%s\n' "${STEPS_META_OUTPUTS_TAGS}" | sed 's/^/  /'
           echo "метки:"
-          printf '%s\n' '${STEPS_META_OUTPUTS_LABELS}' | sed 's/^/  /'
+          printf '%s\n' "${STEPS_META_OUTPUTS_LABELS}" | sed 's/^/  /'
         env:
           STEPS_META_OUTPUTS_TAGS: ${{ steps.meta.outputs.tags }}
           STEPS_META_OUTPUTS_LABELS: ${{ steps.meta.outputs.labels }}
@@ -81,7 +83,10 @@ jobs:
         run: |
           set -euo pipefail
           ACCEPT='application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.docker.distribution.manifest.v2+json'
-          digest='${STEPS_FIRST_OUTPUTS_DIGEST}'
+          # Двойные кавычки обязательны: в одинарных переменная не раскрывается,
+          # digest превращается в текст ${...}, и реестр отвечает числом-ошибкой,
+          # а не манифестом — отсюда «Cannot index number with string "mediaType"».
+          digest="${STEPS_FIRST_OUTPUTS_DIGEST}"
           curl -s -H "Accept: $ACCEPT" "http://localhost:5000/v2/demo/manifests/${digest}" -o /tmp/top.json
           echo "тип верхнего объекта: $(jq -r '.mediaType' /tmp/top.json)"
           echo "записей внутри: $(jq -r '.manifests | length // 0' /tmp/top.json)"
