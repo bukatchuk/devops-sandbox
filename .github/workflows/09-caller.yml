@@ -14,12 +14,12 @@ permissions:
 
 jobs:
   call-313:
-    uses: $/.github/workflows/08-reusable.yml
+    uses: ./.github/workflows/08-reusable.yml
     with:
       python: '3.13'
 
   call-312:
-    uses: $/.github/workflows/08-reusable.yml
+    uses: ./.github/workflows/08-reusable.yml
     with:
       python: '3.12'
 
