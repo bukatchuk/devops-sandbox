@@ -56,13 +56,39 @@ jobs:
           python-version: '3.13'
       - run: pip install bandit==1.9.2
 
-      - name: Анализ кода
+      # В insecure/ дефекты оставлены намеренно: урок как раз учит их находить.
+      # Поэтому находки не роняют прогон (решение владельца: проверки
+      # безопасности здесь — только отчёт), а попадают в сводку прогона.
+      # Полный вывод bandit — в журнале шага; в сводке — только счётчики.
+      - name: Анализ кода (отчёт)
         id: bandit
         continue-on-error: true
         run: bandit -q -r app insecure -f screen
 
-      - name: Только высокая важность — вот это уже ворота
+      # «Ворота» урока: на высокой важности в боевом проекте сборка бы встала.
+      # Здесь шаг показывает, как это выглядело бы, но прогон не ломает.
+      - name: Только высокая важность — вот это уже ворота (отчёт)
+        id: bandit_high
+        continue-on-error: true
         run: bandit -q -r app insecure --severity-level high
+
+      - name: Сводка по находкам
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "### Bandit: учебные находки"
+            echo ""
+            echo "| проверка | исход |"
+            echo "|---|---|"
+            echo "| все находки | ${STEPS_BANDIT_OUTCOME} |"
+            echo "| ворота: высокая важность | ${STEPS_BANDIT_HIGH_OUTCOME} |"
+            echo ""
+            echo "failure означает, что bandit нашёл дефекты в insecure/ — так и задумано."
+          } >> "$GITHUB_STEP_SUMMARY"
+        env:
+          STEPS_BANDIT_OUTCOME: ${{ steps.bandit.outcome }}
+          STEPS_BANDIT_HIGH_OUTCOME: ${{ steps.bandit_high.outcome }}
 
   # Сканирование образа и SBOM
   image:
