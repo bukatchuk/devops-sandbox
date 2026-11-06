@@ -14,6 +14,9 @@ on:
     paths:
       - '.github/workflows/04-contexts.yml'
 
+permissions:
+  contents: read
+
 jobs:
   contexts:
     runs-on: ubuntu-latest
@@ -21,7 +24,7 @@ jobs:
       - name: Что лежит в контекстах
         run: |
           echo "событие:      ${{ github.event_name }}"
-          echo "ссылка:       ${{ github.ref }}"
+          echo "ссылка:       ${GITHUB_REF}"
           echo "коммит:       ${{ github.sha }}"
           echo "репозиторий:  ${{ github.repository }}"
           echo "номер запуска: ${{ github.run_number }}, попытка ${{ github.run_attempt }}"

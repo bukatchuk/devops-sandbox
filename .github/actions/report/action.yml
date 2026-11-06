@@ -16,10 +16,14 @@ runs:
     - name: Собрать строку
       id: build
       shell: bash      # в составном действии shell обязателен у каждого run
-      run: echo "line=${{ inputs.title }} — прогон ${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+      run: echo "line=${INPUTS_TITLE} — прогон ${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+      env:
+        INPUTS_TITLE: ${{ inputs.title }}
     - name: Напечатать
       shell: bash
-      run: echo "${{ steps.build.outputs.line }}"
+      run: echo "${STEPS_BUILD_OUTPUTS_LINE}"
+      env:
+        STEPS_BUILD_OUTPUTS_LINE: ${{ steps.build.outputs.line }}
     - name: Показать, что шагов внутри несколько
       shell: bash
       run: echo "это третий шаг внутри составного действия"

@@ -11,6 +11,9 @@ on:
         type: choice
         options: ['true', 'false']
 
+permissions:
+  contents: read
+
 jobs:
   cells:
     strategy:

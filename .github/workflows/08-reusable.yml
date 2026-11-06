@@ -13,14 +13,19 @@ on:
         description: 'какая версия проверена'
         value: ${{ jobs.test.outputs.tested }}
 
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
     outputs:
       tested: ${{ steps.run.outputs.tested }}
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: ${{ inputs.python }}
       - id: run
@@ -28,4 +33,6 @@ jobs:
         run: |
           pip install -r requirements.txt >/dev/null
           pytest -q
-          echo "tested=${{ inputs.python }}" >> "$GITHUB_OUTPUT"
+          echo "tested=${INPUTS_PYTHON}" >> "$GITHUB_OUTPUT"
+        env:
+          INPUTS_PYTHON: ${{ inputs.python }}

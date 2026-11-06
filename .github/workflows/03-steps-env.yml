@@ -10,6 +10,9 @@ on:
 env:
   LEVEL: workflow
 
+permissions:
+  contents: read
+
 jobs:
   steps-demo:
     runs-on: ubuntu-latest

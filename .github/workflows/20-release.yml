@@ -25,18 +25,21 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          persist-credentials: false
           fetch-depth: 0    # нужна вся история: changelog считается по ней
 
       - name: Проверить, что версии ещё нет
         shell: bash
         run: |
-          if git rev-parse "${{ inputs.version }}" >/dev/null 2>&1; then
-            echo "тег ${{ inputs.version }} уже существует — выпускать нечего"
+          if git rev-parse "${INPUTS_VERSION}" >/dev/null 2>&1; then
+            echo "тег ${INPUTS_VERSION} уже существует — выпускать нечего"
             exit 1
           fi
           echo "версия свободна"
+        env:
+          INPUTS_VERSION: ${{ inputs.version }}
 
       - name: Собрать changelog
         id: notes
@@ -63,10 +66,12 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist
-          tar -czf "dist/demo-${{ inputs.version }}.tar.gz" app tests requirements.txt
+          tar -czf "dist/demo-${INPUTS_VERSION}.tar.gz" app tests requirements.txt
           ls -l dist/
-          sha256sum "dist/demo-${{ inputs.version }}.tar.gz" > dist/SHA256SUMS
+          sha256sum "dist/demo-${INPUTS_VERSION}.tar.gz" > dist/SHA256SUMS
           cat dist/SHA256SUMS
+        env:
+          INPUTS_VERSION: ${{ inputs.version }}
 
       - name: Создать релиз
         env:
@@ -82,7 +87,7 @@ jobs:
 
       - name: Артефакты сборки рядом с релизом
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: release-${{ inputs.version }}
           path: dist/

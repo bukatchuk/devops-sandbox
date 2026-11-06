@@ -15,12 +15,17 @@ on:
     paths:
       - '.github/workflows/06-cache.yml'
 
+permissions:
+  contents: read
+
 jobs:
   install:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: '3.13'
 
@@ -29,7 +34,7 @@ jobs:
       - name: Кэш колёс pip
         id: cache
         if: inputs.use_cache != 'no'
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: ~/.cache/pip
           key: pip-${{ runner.os }}-py313-${{ hashFiles('requirements.txt') }}
@@ -37,7 +42,9 @@ jobs:
             pip-${{ runner.os }}-py313-
 
       - name: Попадание в кэш
-        run: echo "cache-hit=[${{ steps.cache.outputs.cache-hit }}] (пусто = кэша не было или он выключен)"
+        run: echo "cache-hit=[${STEPS_CACHE_OUTPUTS_CACHE_HIT}] (пусто = кэша не было или он выключен)"
+        env:
+          STEPS_CACHE_OUTPUTS_CACHE_HIT: ${{ steps.cache.outputs.cache-hit }}
 
       - name: Установка зависимостей с замером
         run: |
